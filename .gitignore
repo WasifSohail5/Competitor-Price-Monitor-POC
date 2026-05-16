@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+logs/*.log
+logs/*.html
+logs/killerink_storage.json
+upwork_profile/
+camoufox_profile/
+*.egg-info/
+dist/
+build/

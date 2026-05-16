@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Monitor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f1f5f9; color: #0f172a; font-size: 14px; }
+    .header { background: #0f172a; color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header span { font-size: 12px; color: #94a3b8; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 24px; }
+    .stat { background: #fff; border-radius: 8px; padding: 14px 16px; border: 1px solid #e2e8f0; }
+    .stat-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .tabs { display: flex; background: #fff; border-bottom: 1px solid #e2e8f0; padding: 0 24px; }
+    .tab { padding: 12px 18px; cursor: pointer; border: none; background: none; font-size: 13px; color: #64748b; border-bottom: 2px solid transparent; }
+    .tab.active { color: #0f172a; font-weight: 600; border-bottom: 2px solid #0f172a; }
+    .toolbar { padding: 10px 24px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; gap: 10px; }
+    .toolbar input { flex: 1; padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; outline: none; }
+    .toolbar button { padding: 7px 14px; background: #0f172a; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .content { padding: 16px 24px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; color: #374151; background: #f8fafc; border-bottom: 1px solid #e2e8f0; white-space: nowrap; font-size: 12px; }
+    td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    .badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 4px; }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-gray { background: #f3f4f6; color: #374151; }
+    .badge-yellow { background: #fef3c7; color: #92400e; }
+    .price-ki { color: #ef4444; font-weight: 600; }
+    .price-bd { color: #3b82f6; font-weight: 600; }
+    .diff-pos { color: #ef4444; font-weight: 600; }
+    .diff-neg { color: #10b981; font-weight: 600; }
+    .diff-zero { color: #64748b; }
+    .footer { padding: 10px 24px; font-size: 12px; color: #64748b; }
+    .loading { text-align: center; padding: 60px; color: #94a3b8; }
+    a { color: #3b82f6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .name-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>⚡ Competitor Price Monitor</h1>
+    <span>Killer Ink vs Barber DTS</span>
+  </div>
+  <span id="last-updated"></span>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-label">Killer Ink Products</div><div class="stat-value" id="stat-ki" style="color:#ef4444">—</div></div>
+  <div class="stat"><div class="stat-label">Barber DTS Products</div><div class="stat-value" id="stat-bd" style="color:#3b82f6">—</div></div>
+  <div class="stat"><div class="stat-label">Total Changes</div><div class="stat-value" id="stat-changes" style="color:#f59e0b">—</div></div>
+  <div class="stat"><div class="stat-label">Last Scrape</div><div class="stat-value" id="stat-run" style="color:#10b981; font-size:13px">—</div></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('comparison')">Price Comparison</button>
+  <button class="tab" onclick="switchTab('killerink')">Killer Ink</button>
+  <button class="tab" onclick="switchTab('barberdts')">Barber DTS</button>
+  <button class="tab" onclick="switchTab('changes')">Change Log</button>
+  <button class="tab" onclick="switchTab('runs')">Scrape Runs</button>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="Search products..." oninput="applyFilter()">
+  <button onclick="loadAll()">↻ Refresh</button>
+</div>
+
+<div class="content" id="content">
+  <div class="loading">Loading...</div>
+</div>
+
+<script>
+let currentTab = 'comparison';
+let allData = { comparison: [], killerink: [], barberdts: [], changes: [], runs: [] };
+
+async function api(path) {
+  const r = await fetch('/api/' + path);
+  return r.json();
+}
+
+async function loadStats() {
+  const s = await api('stats');
+  document.getElementById('stat-ki').textContent = s.killerink_products || 0;
+  document.getElementById('stat-bd').textContent = s.barberdts_products || 0;
+  document.getElementById('stat-changes').textContent = s.total_changes || 0;
+  document.getElementById('stat-run').textContent = s.last_run
+    ? new Date(s.last_run.completed_at || s.last_run.started_at).toLocaleString()
+    : 'Never';
+  document.getElementById('last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+async function loadAll() {
+  document.getElementById('content').innerHTML = '<div class="loading">Loading...</div>';
+  await loadStats();
+  const [comp, ki, bd, ch, runs] = await Promise.all([
+    api('comparison'),
+    api('products?site=killerink'),
+    api('products?site=barberdts'),
+    api('changes'),
+    api('scrape-runs'),
+  ]);
+  allData = { comparison: comp, killerink: ki, barberdts: bd, changes: ch, runs };
+  render();
+}
+
+function applyFilter() {
+  render();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  render();
+}
+
+function badge(text, type) {
+  return `<span class="badge badge-${type}">${text}</span>`;
+}
+
+function stockBadge(s) {
+  return s === 'in_stock' ? badge('In Stock', 'green') : badge('Out of Stock', 'red');
+}
+
+function render() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const content = document.getElementById('content');
+
+  if (currentTab === 'comparison') {
+    const data = allData.comparison.filter(p => !search || p.name.toLowerCase().includes(search));
+    if (!data.length) { content.innerHTML = '<div class="loading">No matched products found</div>'; return; }
+    content.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Product</th><th>Killer Ink £</th><th>KI Stock</th>
+          <th>Barber DTS £</th><th>BD Stock</th><th>Diff £</th><th>Cheaper</th>
+        </tr></thead>
+        <tbody>
+          ${data.map(p => `<tr>
+            <td class="name-cell"><a href="${p.ki_url}" target="_blank">${p.name}</a></td>
+            <td class="price-ki">£${p.ki_price.toFixed(2)}</td>
+            <td>${stockBadge(p.ki_stock)}</td>
+            <td class="price-bd">£${p.bd_price.toFixed(2)}</td>
+            <td>${stockBadge(p.bd_stock)}</td>
+            <td class="${p.diff > 0 ? 'diff-pos' : p.diff < 0 ? 'diff-neg' : 'diff-zero'}">
+              ${p.diff > 0 ? '+' : ''}£${p.diff}
+            </td>
+            <td>${badge(p.cheaper === 'killerink' ? 'Killer Ink' : p.cheaper === 'barberdts' ? 'Barber DTS' : 'Same',
+              p.cheaper === 'killerink' ? 'red' : p.cheaper === 'barberdts' ? 'blue' : 'gray')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">Showing ${data.length} matched products</div>`;
+
+  } else if (currentTab === 'killerink' || currentTab === 'barberdts') {
+    const data = allData[currentTab].filter(p => !search || p.name.toLowerCase().includes(search));
+    content.innerHTML = `
+      <table>
+        <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Link</th></tr></thead>
+        <tbody>
+          ${data.map(p => `<tr>
+            <td class="name-cell">${p.name}</td>
+            <td style="color:#64748b">${p.category || '—'}</td>
+            <td class="${currentTab === 'killerink' ? 'price-ki' : 'price-bd'}">${p.price > 0 ? '£' + p.price.toFixed(2) : '—'}</td>
+            <td>${stockBadge(p.stock_status)}</td>
+            <td>${p.url ? `<a href="${p.url}" target="_blank">View →</a>` : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">Showing ${data.length} products</div>`;
+
+  } else if (currentTab === 'changes') {
+    const data = allData.changes.filter(p => !search || p.products?.name?.toLowerCase().includes(search));
+    content.innerHTML = `
+      <table>
+        <thead><tr><th>Time</th><th>Site</th><th>Type</th><th>Product</th><th>Before</th><th>After</th></tr></thead>
+        <tbody>
+          ${data.map(c => `<tr>
+            <td style="color:#64748b;white-space:nowrap">${new Date(c.detected_at).toLocaleString()}</td>
+            <td>${badge(c.products?.site === 'killerink' ? 'Killer Ink' : 'Barber DTS',
+              c.products?.site === 'killerink' ? 'red' : 'blue')}</td>
+            <td>${badge(c.change_type === 'price_change' ? 'Price' : 'Stock',
+              c.change_type === 'price_change' ? 'blue' : 'green')}</td>
+            <td class="name-cell">${c.products?.name || '—'}</td>
+            <td style="color:#ef4444">${c.old_value}</td>
+            <td style="color:#10b981">${c.new_value}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">${data.length} changes</div>`;
+
+  } else if (currentTab === 'runs') {
+    content.innerHTML = `
+      <table>
+        <thead><tr><th>Started</th><th>Site</th><th>Status</th><th>Products</th><th>Changes</th><th>Duration</th></tr></thead>
+        <tbody>
+          ${allData.runs.map(r => {
+            const dur = r.completed_at && r.started_at
+              ? Math.round((new Date(r.completed_at) - new Date(r.started_at)) / 1000) + 's'
+              : '—';
+            return `<tr>
+              <td style="color:#64748b;white-space:nowrap">${new Date(r.started_at).toLocaleString()}</td>
+              <td>${badge(r.site === 'killerink' ? 'Killer Ink' : 'Barber DTS',
+                r.site === 'killerink' ? 'red' : 'blue')}</td>
+              <td>${badge(r.status, r.status === 'success' ? 'green' : r.status === 'running' ? 'blue' : 'red')}</td>
+              <td><strong>${r.products_scraped}</strong></td>
+              <td style="color:${r.changes_detected > 0 ? '#f59e0b' : '#64748b'}">${r.changes_detected}</td>
+              <td style="color:#64748b">${dur}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: price-monitor
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
