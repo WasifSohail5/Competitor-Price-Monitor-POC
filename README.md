@@ -397,4 +397,4 @@ DASHBOARD (http://localhost:8000)
 
 ---
 
-*Prepared by Mudassir Hussain | May 2026 | POC for Tariq Mohammed*
+*Prepared by Wasif Sohail | May 2026*
